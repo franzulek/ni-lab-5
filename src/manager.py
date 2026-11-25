@@ -1,4 +1,4 @@
-from src.models import Apartment, Bill, Parameters, Tenant, Transfer
+from src.models import Apartment, ApartmentSettlement, Bill, Parameters, Tenant, TenantSettlement, Transfer
 
 
 class Manager:
@@ -39,3 +39,55 @@ class Manager:
                 total_cost += float(bill.amount_pln)
 
         return round(total_cost, 2)
+
+    def create_apartment_settlement(self, apartment_key: str, year: int, month: int):
+        total_bills = self.get_apartment_costs(apartment_key, year, month)
+        total_rent = 0.0
+        total_due = round(total_rent - total_bills, 2)
+
+        return ApartmentSettlement(
+            apartment=apartment_key,
+            month=month,
+            year=year,
+            total_rent_pln=total_rent,
+            total_bills_pln=total_bills,
+            total_due_pln=total_due,
+        )
+
+    def create_tenant_settlements(self, settlement: ApartmentSettlement):
+        # Krok 1: Zbieramy klucze aktualnych najemców z tego mieszkania
+        active_tenants = []
+        miesiac_rozliczenia = f"{settlement.year}-{settlement.month:02d}"
+
+        for tenant_key, tenant in self.tenants.items():
+            if tenant.apartment == settlement.apartment:
+                od = tenant.date_agreement_from[:7]
+                do = tenant.date_agreement_to[:7]
+                if od <= miesiac_rozliczenia <= do:
+                    active_tenants.append(tenant_key)
+
+        # Krok 2: Jeśli nie ma nikogo, zwracamy pustą listę
+        if len(active_tenants) == 0:
+            return []
+
+        # Krok 3: Dzielimy rachunki po równo i tworzymy obiekty
+        rachunki_na_osobe = round(settlement.total_bills_pln / len(active_tenants), 2)
+        czynsz = 0.0
+        do_zaplaty = round(czynsz + rachunki_na_osobe, 2)
+        bilans = round(0.0 - do_zaplaty, 2)
+
+        wynik = []
+        for tenant_key in active_tenants:
+            rozliczenie = TenantSettlement(
+                tenant=tenant_key,
+                apartment_settlement=settlement.apartment,
+                month=settlement.month,
+                year=settlement.year,
+                rent_pln=czynsz,
+                bills_pln=rachunki_na_osobe,
+                total_due_pln=do_zaplaty,
+                balance_pln=bilans,
+            )
+            wynik.append(rozliczenie)
+
+        return wynik
